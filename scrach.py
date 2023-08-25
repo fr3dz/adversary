@@ -76,7 +76,8 @@ class IterativeComposedVicuna(torch.nn.Module):
             soft_embeddings.append(soft_embedding)
 
 
-        last_10_soft_tokens = torch.stack(soft_embeddings, dim=0)
+        last_10_soft_tokens = torch.stack(soft_embeddings, dim=1)
+        # print(last_10_soft_tokens.shape)
         outer_output = self.outer(inputs_embeds=last_10_soft_tokens)
 
         return outer_output
@@ -94,9 +95,9 @@ loss = -logits_for_sure.mean()
 # %%
 import torch.optim as optim
 
-optimizer = optim.Adam([fullmodel.trainable_embedding], lr=0.001)
+optimizer = optim.Adam([fullmodel.trainable_embedding], lr=0.002)
 
-epochs = 10
+epochs = 1000
 
 # Training Loop
 for epoch in range(epochs):
@@ -114,5 +115,13 @@ for epoch in range(epochs):
     print(f"Epoch {epoch+1}/{epochs} - Loss: {loss.item()}")
 
 print("Training completed!")
+
+# %%
+
+final_output = fullmodel()
+probs = torch.nn.functional.softmax(final_output.logits[9, 0, :], dim=-1) 
+# %%
+
+print(probs[id_sure])
 
 # %%

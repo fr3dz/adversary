@@ -113,13 +113,15 @@ for epoch in range(epochs):
     optimizer.step()
 
     print(f"Epoch {epoch+1}/{epochs} - Loss: {loss.item()}")
+    probs = torch.nn.functional.softmax(output.logits[0,-1, :], dim=-1) 
+    print(f"Epoch {epoch+1}/{epochs} - Prob: {probs[id_sure].item()}")
 
 print("Training completed!")
 
 # %%
 
 final_output = fullmodel()
-probs = torch.nn.functional.softmax(final_output.logits[9, 0, :], dim=-1) 
+probs = torch.nn.functional.softmax(final_output.logits[0,-1, :], dim=-1) 
 # %%
 
 print(probs[id_sure])

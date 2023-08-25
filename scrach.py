@@ -55,28 +55,29 @@ class IterativeComposedVicuna(torch.nn.Module):
     def forward(self):
         embeddings = self.prompt_embedding
         embeddings[self.token_position] = self.trainable_embedding
-        # Prepare a tensor to store the "soft" embeddings
-        soft_tokens = [embeddings]
-
+        logits_accumulated = []
         for _ in range(self.iterations):
             # Pass the tokens through the inner GPT-2
-            inner_output = self.inner(inputs_embeds=soft_tokens[-1].unsqueeze(0))
+            inner_output = self.inner(inputs_embeds=embeddings.unsqueeze(0))
+            logits_accumulated.append(inner_output.logits[:, -1, :])
             # Compute softmax over the logits to get token probabilities
             probs = torch.nn.functional.softmax(inner_output.logits[:, -1, :], dim=-1)
             # Compute the "soft" embedding using the probabilities
             soft_embedding = torch.matmul(probs, self.embed_matrix)
+            # Update the "soft" embedding
+            embeddings = torch.cat([embeddings, soft_embedding], dim=0)
+        
 
-            # Store the "soft" embedding
-            soft_tokens.append(soft_embedding)   
+        # Now, compute the soft embeddings for the last 10 tokens
+        soft_embeddings = []
+        for logits in logits_accumulated[-10:]:
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+            soft_embedding = torch.matmul(probs, self.embed_matrix)
+            soft_embeddings.append(soft_embedding)
 
-         # Pass the last 10 "soft" embeddings to the outer GPT-2
-        print(soft_tokens[0].shape)
-        last_10_soft_tokens = soft_tokens[0][-10:]
-        print(last_10_soft_tokens.shape)
-        outer_output = self.outer(inputs_embeds=last_10_soft_tokens.unsqueeze(0))
 
-        return outer_output
-
+        last_10_soft_tokens = torch.stack(soft_embeddings, dim=0)
+        outer_output = self.outer(inputs_embeds=last_10_soft_tokens)
 
         return outer_output
 # %%
@@ -89,5 +90,29 @@ id_sure = 18585 # tokenizer('Sure')['input_ids'][1]
 output = fullmodel()
 logits_for_sure = output.logits[0, -1, id_sure] # batch position n_vocab
 loss = -logits_for_sure.mean()
+
+# %%
+import torch.optim as optim
+
+optimizer = optim.Adam([fullmodel.trainable_embedding], lr=0.001)
+
+epochs = 10
+
+# Training Loop
+for epoch in range(epochs):
+    optimizer.zero_grad()
+    output = fullmodel()
+    logits_for_sure = output.logits[0, -1, id_sure] # batch position n_vocab
+    loss = -logits_for_sure.mean()
+
+      # Backward pass
+    loss.backward(retain_graph = True)
+
+    # Update
+    optimizer.step()
+
+    print(f"Epoch {epoch+1}/{epochs} - Loss: {loss.item()}")
+
+print("Training completed!")
 
 # %%
